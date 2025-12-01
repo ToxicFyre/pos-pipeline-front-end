@@ -182,5 +182,6 @@ cython_debug/
 
 sucursales.json
 secrets.env
+run_weekly_sales_report.cmd
 
 data/
