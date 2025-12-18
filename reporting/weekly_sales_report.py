@@ -35,7 +35,7 @@ def run_sales_group_mart(
     data_root = Path(data_root)
     paths = DataPaths.from_root(data_root, Path(branches_file))
 
-    df = marts.fetch_group(paths, start_date, end_date)
+    df = marts.fetch_group(paths, start_date, end_date, mode="force")
     print(df.head())
 
     csv_path = (
