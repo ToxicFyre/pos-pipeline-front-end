@@ -180,7 +180,7 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
-sucursales.json
+*.json
 secrets.env
 run_weekly_sales_report.cmd
 run_daily_payments_forecast.cmd
