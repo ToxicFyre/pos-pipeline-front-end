@@ -13,7 +13,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-from monthly_punto_valle_sales import generate_monthly_report
+from reporting.monthly_punto_valle_sales import generate_monthly_report
 
 # Load environment variables from secrets.env if it exists
 def load_secrets_env():
@@ -178,7 +178,7 @@ def cleanup_old_temp_files(temp_dir: Path, current_month_date: date):
 def main():
     """Main function: generate report and upload to Google Drive."""
     # Calculate the target month (last month)
-    from monthly_punto_valle_sales import get_last_month_range
+    from reporting.monthly_punto_valle_sales import get_last_month_range
     
     start_date, _ = get_last_month_range()
     temp_dir = Path("data") / "a_raw" / "order_times" / "temp"
@@ -194,7 +194,7 @@ def main():
         output_path = generate_monthly_report(
             sucursal="Punto Valle",
             data_root="data",
-            branches_file="./utils/sucursales.json",
+            branches_file="./sucursales.json",
         )
         print(f"Report generated: {output_path}")
     except Exception as e:
@@ -221,7 +221,7 @@ def main():
             service, str(output_path), DRIVE_FOLDER_ID
         )
 
-        print("OK ✅ Subido a Drive")
+        print("OK - Subido a Drive")
         print("Nombre:", uploaded_name)
         print("File ID:", file_id)
         print("Link:", view_link or "(no disponible)")
