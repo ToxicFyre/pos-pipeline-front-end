@@ -1,0 +1,10 @@
+{
+  "Kavia": {"code": "XXXX", "valid_from": "2024-02-21", "valid_to": null},
+  "QIN": {"code": "XXXX", "valid_from": "2024-02-21", "valid_to": null},
+  "Carreta": {"code": "XXXX", "valid_from": "2024-01-15", "valid_to": null},
+  "Zambrano": {"code": "XXXX", "valid_from": "2024-01-15", "valid_to": null},
+  "Punto Valle": {"code": "XXXX", "valid_from": "2022-02-01", "valid_to": null},
+  "Nativa": {"code": "XXXX", "valid_from": "2024-04-25", "valid_to": null},
+  "CrediClub": {"code": "XXXX", "valid_from": "2024-11-20", "valid_to": null},
+  "CEDIS": {"code": "XXXX", "valid_from": null, "valid_to": null}
+}
