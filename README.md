@@ -7,9 +7,9 @@ This is the front-end aspect of the pos pipeline, for weekly use.
 
 Fetches transfer data for each week (Mon-Sun) from Dec 1 to Feb 7, applies correct unit prices from `PRECIOS.xlsx`, and outputs consolidated CSVs plus a cost-difference report.
 
-```cmd
-run_weekly_transfers.cmd
-```
+**Mac/Linux:** `./mac-code-kit/run_weekly_transfers.sh` (see `mac-code-kit/README.md`)
+
+**Windows:** `run_weekly_transfers.cmd`
 
 Or with options (requires `WS_USER`, `WS_PASS`, `WS_BASE` env vars):
 

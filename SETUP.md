@@ -32,7 +32,17 @@ See `TEN_WEEK_ANALYSIS_CORRECTIONS.md` for the full pre-run checklist.
 
 ## 5. Run scripts
 
-The `.cmd` files are not in the repo (they contain paths/env). Run directly:
+**Mac / Linux:** Use the `mac-code-kit/` folder:
+
+```bash
+chmod +x mac-code-kit/*.sh
+./mac-code-kit/run_weekly_transfers.sh
+./mac-code-kit/run_weekly_transfer_pivots.sh
+```
+
+See `mac-code-kit/README.md` for details.
+
+**Windows:** The `.cmd` files are not in the repo. Run directly:
 
 ```bash
 python testing/get_weekly_transfers_with_prices.py --data-root data --precios-path PRECIOS.xlsx
