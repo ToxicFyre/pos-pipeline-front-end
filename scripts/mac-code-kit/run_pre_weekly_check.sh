@@ -3,7 +3,7 @@
 # Run before get_weekly_transfers_with_prices if gold file was updated.
 
 set -e
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 echo "[$(date)] Pre-weekly check: refreshing PRECIOS/AG_PRECIOS from gold"
 

@@ -5,10 +5,12 @@ from pathlib import Path
 
 import pandas as pd
 
-# Add project root for imports
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Add src to path for pos_frontend
+_root = Path(__file__).resolve().parent.parent.parent
+if str(_root / "src") not in sys.path:
+    sys.path.insert(0, str(_root / "src"))
 
-from testing.get_weekly_transfers_with_prices import (
+from pos_frontend.transfers.weekly_with_prices import (
     apply_prices,
     compute_weekly_cost_comparison,
     normalize_producto_for_match,

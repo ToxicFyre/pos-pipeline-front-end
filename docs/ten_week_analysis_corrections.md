@@ -161,7 +161,7 @@ Golden file date range: Feb 2–8. Current last week: Feb 2–7. Missing Feb 8 c
 1. **Reconciliation expectations**:
    - Use gold detail (AG + PT-R) as the reference: ~312k for Feb 2–7.
    - Our ~315k is ~2–3k over. Remaining gap comes from:
-     - Extra rows we have (14 branch rows gold doesn’t),
+     - Extra rows we have (14 branch rows gold doesn't),
      - ~34 transfer products not in PRECIOS/AG_PRECIOS (Wansoft prices).
 
 2. **Output**:
@@ -218,6 +218,6 @@ This:
 | `testing/get_weekly_transfers_with_prices.py` | 10-week analysis script |
 | `testing/investigate_transfer_cost.py` | Parses gold, builds AG_PRECIOS |
 | `testing/compare_unit_prices_full.py` | Full PRECIOS vs gold comparison, outputs updated PRECIOS |
-| `INVESTIGATION_REPORT.md` | High-level investigation summary |
+| [investigation_report.md](investigation_report.md) | High-level investigation summary |
 | `data/c_processed/transfers/weekly/edge_case_investigation.md` | Edge cases and NUMEROS vs detail |
 | `data/c_processed/transfers/weekly/unit_price_investigation_report.md` | Unit price comparison report |

@@ -28,21 +28,21 @@ Copy `sucursales.example.json` to `sucursales.json` and replace `XXXX` placehold
 
 Run `python testing/compare_unit_prices_full.py` and `python testing/investigate_transfer_cost.py` after placing the golden reference file (`TRANSFERENCIAS DEL 02 AL 08 FEBRERO.xlsx` or similar) where the scripts expect it. Copy `PRECIOS_UPDATED.xlsx` → `PRECIOS.xlsx` and `AG_PRECIOS_UPDATED.xlsx` → `AG_PRECIOS.xlsx` as needed.
 
-See `TEN_WEEK_ANALYSIS_CORRECTIONS.md` for the full pre-run checklist.
+See [ten_week_analysis_corrections.md](ten_week_analysis_corrections.md) for the full pre-run checklist.
 
 ## 5. Run scripts
 
-**Mac / Linux:** Use the `mac-code-kit/` folder:
+**Mac / Linux:** Use the `scripts/mac-code-kit/` folder:
 
 ```bash
-chmod +x mac-code-kit/*.sh
-./mac-code-kit/run_weekly_transfers.sh
-./mac-code-kit/run_weekly_transfer_pivots.sh
+chmod +x scripts/mac-code-kit/*.sh
+./scripts/mac-code-kit/run_weekly_transfers.sh
+./scripts/mac-code-kit/run_weekly_transfer_pivots.sh
 ```
 
-See `mac-code-kit/README.md` for details.
+See `scripts/mac-code-kit/README.md` for details.
 
-**Windows:** The `.cmd` files are not in the repo. Run directly:
+**Windows:** The `.cmd` files are in the repo root. Run directly:
 
 ```bash
 python testing/get_weekly_transfers_with_prices.py --data-root data --precios-path PRECIOS.xlsx

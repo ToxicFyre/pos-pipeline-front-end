@@ -3,7 +3,7 @@
 # Requires: source ../secrets.env first, or set WS_USER, WS_PASS, WS_BASE.
 
 set -e
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 echo "[$(date)] Starting weekly transfers with prices in: $(pwd)"
 
