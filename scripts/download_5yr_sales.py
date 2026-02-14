@@ -7,6 +7,7 @@ Requires: secrets.env at project root with WS_BASE, WS_USER, WS_PASS.
 Run from project root: python scripts/download_5yr_sales.py
 Use --test for a 7-day run to verify without full download.
 Use --export-only to export existing clean data to CSV (no download).
+Use --skip-download to skip re-downloading chunks and load from existing clean CSVs.
 """
 
 import argparse
@@ -31,9 +32,9 @@ load_secrets_env()
 from pos_core import DataPaths
 from pos_core.sales import core as sales_core
 
-# WS_BASE only required for download (not --export-only)
+# WS_BASE only required for download (not --export-only or --skip-download)
 if not os.environ.get("WS_BASE"):
-    print("Note: WS_BASE not set. Use --export-only to export existing data only.")
+    print("Note: WS_BASE not set. Use --export-only or --skip-download to use existing data.")
 
 
 CHUNK_DAYS = 90  # Smaller chunks to avoid Wansoft API size limits
@@ -62,6 +63,11 @@ def main() -> int:
         action="store_true",
         help="Export existing clean data to CSV (no download)",
     )
+    parser.add_argument(
+        "--skip-download",
+        action="store_true",
+        help="Skip re-downloading chunks; load from existing clean CSVs and export",
+    )
     args = parser.parse_args()
 
     root = get_project_root()
@@ -78,6 +84,10 @@ def main() -> int:
         print(f"Loading existing clean sales for {start_str} to {end_str}...")
         df = _load_from_clean_csvs(paths, start_str, end_str)
         print(f"Loaded {len(df)} rows from clean CSVs.")
+    elif args.skip_download:
+        print(f"Loading existing clean sales for {start_str} to {end_str} (skipping download)...")
+        df = _load_from_clean_csvs(paths, start_str, end_str)
+        print(f"Done. {len(df)} rows in fact_sales_item_line.")
     else:
         if not os.environ.get("WS_BASE"):
             print("Error: WS_BASE not set. Ensure secrets.env exists with WS_BASE, WS_USER, WS_PASS.")
@@ -92,7 +102,7 @@ def main() -> int:
             print(f"Chunk {chunk_num}: {cur.isoformat()} to {chunk_end.isoformat()}")
             sales_core.fetch(paths, cur.isoformat(), chunk_end.isoformat(), mode="force")
             cur = chunk_end + timedelta(days=1)
-        df = sales_core.load(paths, start_str, end_str)
+        df = _load_from_clean_csvs(paths, start_str, end_str)
         print(f"Done. {len(df)} rows in fact_sales_item_line.")
 
     out_path = root / "data" / f"fact_sales_5yr_{start_str}_{end_str}.csv"
