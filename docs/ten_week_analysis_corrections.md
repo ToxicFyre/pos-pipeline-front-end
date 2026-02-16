@@ -1,6 +1,29 @@
-# Modifications to the 10-Week Transfer Analysis (Per Golden Database Investigation)
+# Modifications to the 10-Week and 12-Week Transfer Analysis (Per Golden Database Investigation)
 
-## Implementation Status
+## 12-Week Pipeline (Production)
+
+The **12-week pipeline** uses dynamic Mon–Sun week generation instead of hardcoded `WEEK_RANGES`:
+
+1. Run `run_update_precios_unit_prices.sh` to ensure PRECIOS.xlsx has PRECIO UNITARIO (UNIDAD logic).
+2. Run `run_weekly_transfers.sh`, which passes `--weeks 12` and `--exclude-cedis-dest` to the Python script.
+3. Run `run_weekly_transfer_pivots.sh` to build pivot marts.
+
+The script accepts `--weeks N` (e.g. `--weeks 12`) to generate the last N Mon–Sun weeks from `--end` (or today). Use `--end YYYY-MM-DD` to anchor the last week (e.g. last Sunday).
+
+### UNIDAD Semantics (PRECIOS.xlsx)
+
+PRECIOS.xlsx uses the UNIDAD column to determine unit price:
+
+| UNIDAD | Meaning | PRECIO UNITARIO |
+|--------|---------|-----------------|
+| LT, KG | PRECIO DRIVE is already the unit price | Use PRECIO DRIVE as-is |
+| PZ | PRECIO DRIVE is the presentation price | PRECIO UNITARIO = PRECIO DRIVE / PRESENTACION |
+
+`update_precios_with_unit_prices.py` writes the PRECIO UNITARIO column. `load_precios()` prefers PRECIO UNITARIO when present.
+
+---
+
+## Implementation Status (10-Week / 12-Week)
 
 | Section | Status |
 |---------|--------|
@@ -190,7 +213,23 @@ Before running the 10-week analysis, ensure:
 
 ## 8. Script Invocation
 
-Recommended command for the 10-week analysis:
+**12-week production (recommended):**
+
+```bash
+# Via shell (runs run_update_precios_unit_prices.sh first)
+./scripts/mac-code-kit/run_weekly_transfers.sh
+
+# Or directly:
+python testing/get_weekly_transfers_with_prices.py \
+  --data-root data \
+  --precios-path PRECIOS.xlsx \
+  --ag-precios-path AG_PRECIOS.xlsx \
+  --weeks 12 \
+  --end 2026-02-08 \
+  --exclude-cedis-dest
+```
+
+**Legacy 10-week (hardcoded WEEK_RANGES):**
 
 ```bash
 python testing/get_weekly_transfers_with_prices.py \
@@ -202,12 +241,12 @@ python testing/get_weekly_transfers_with_prices.py \
   --exclude-cedis-dest
 ```
 
-This:
+Both:
 
-- Loads PRECIOS and AG_PRECIOS with gold-aligned prices.
-- Applies AG_PRECIOS to AG rows and PRECIOS to PT rows.
-- Excludes CEDIS from totals for gold/mart comparison.
-- Produces `weekly_breakdown.csv`, `weekly_cost_comparison.csv`, and `price_correction_report.csv`.
+- Load PRECIOS and AG_PRECIOS with gold-aligned prices.
+- Apply AG_PRECIOS to AG rows and PRECIOS to PT rows.
+- Exclude CEDIS from totals for gold/mart comparison.
+- Produce `weekly_breakdown.csv`, `weekly_cost_comparison.csv`, and `price_correction_report.csv`.
 
 ---
 

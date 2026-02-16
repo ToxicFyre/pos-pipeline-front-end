@@ -1,5 +1,5 @@
 #!/bin/bash
-# Add PRECIO UNITARIO column to PRECIOS.xlsx (PRECIO DRIVE / PRESENTACION).
+# Add PRECIO UNITARIO: when UNIDAD is LT/KG use PRECIO DRIVE; when UNIDAD is PZ use PRECIO DRIVE / PRESENTACION.
 # Run this before the weekly transfer pipeline if PRECIOS uses PRESENTACION quantities.
 
 set -e

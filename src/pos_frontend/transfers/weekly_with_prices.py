@@ -55,10 +55,20 @@ def get_week_boundaries(d: date) -> tuple[date, date]:
     return monday, sunday
 
 
+def build_week_ranges(end_date: date, num_weeks: int) -> list[tuple[date, date]]:
+    """Return num_weeks Mon-Sun ranges ending at or before end_date, most recent first."""
+    _, last_sunday = get_week_boundaries(end_date)
+    return [
+        (last_sunday - timedelta(days=6 + i * 7), last_sunday - timedelta(days=i * 7))
+        for i in range(num_weeks)
+    ]
+
+
 def load_precios(precios_path: str | Path) -> pd.DataFrame:
     """Load PRECIOS.xlsx and return DataFrame with Producto, Precio unitario.
 
-    PRECIO DRIVE is price for PRESENTACION quantity; PRECIO UNITARIO = PRECIO DRIVE / PRESENTACION.
+    When UNIDAD is LT or KG: PRECIO DRIVE is unit price → use as-is.
+    When UNIDAD is PZ: PRECIO DRIVE is presentation price → PRECIO UNITARIO = PRECIO DRIVE / PRESENTACION.
     Prefers PRECIO UNITARIO column if present (from update_precios_with_unit_prices.py), else computes it.
     """
     path = Path(precios_path)
@@ -71,11 +81,17 @@ def load_precios(precios_path: str | Path) -> pd.DataFrame:
         df["Precio unitario"] = pd.to_numeric(df["PRECIO UNITARIO"], errors="coerce")
     elif precio_drive_col:
         df["Precio unitario"] = pd.to_numeric(df[precio_drive_col], errors="coerce")
+        unidad_col = next((c for c in df.columns if str(c).strip().upper() == "UNIDAD"), None)
         present_col = next((c for c in df.columns if "present" in str(c).lower()), None)
-        if present_col is not None:
+        if unidad_col is not None and present_col is not None:
+            unidad = df[unidad_col].astype(str).str.strip().str.upper()
             present_num = pd.to_numeric(df[present_col], errors="coerce")
-            mask = (present_num > 0) & df["Precio unitario"].notna()
-            df.loc[mask, "Precio unitario"] = df.loc[mask, "Precio unitario"] / present_num.loc[mask]
+            # UNIDAD in (LT, KG): PRECIO DRIVE is unit price → use as-is
+            # UNIDAD = PZ: PRECIO DRIVE is presentation price → divide by PRESENTACION
+            mask_pz = (unidad == "PZ") & (present_num > 0) & df["Precio unitario"].notna()
+            df.loc[mask_pz, "Precio unitario"] = (
+                df.loc[mask_pz, "Precio unitario"] / present_num.loc[mask_pz]
+            )
     else:
         df["Precio unitario"] = pd.to_numeric(df.get("Precio unitario", float("nan")), errors="coerce")
     df = df.drop_duplicates(subset=["Producto"], keep="first")
@@ -315,22 +331,39 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Use Feb 2-8 for last week (matches gold; requires core.fetch to support Feb 8)",
     )
+    parser.add_argument(
+        "--weeks",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Generate last N Mon-Sun weeks from --end (or today). Overrides hardcoded WEEK_RANGES. Default when used: 12.",
+    )
     args = parser.parse_args(argv)
 
     data_root = Path(args.data_root)
     batch_dir = data_root / "b_clean" / "transfers" / "batch"
     output_dir = data_root / "c_processed" / "transfers" / "weekly"
 
-    # Filter week ranges to requested period
-    start_d = date.fromisoformat(args.start)
-    end_d = date.fromisoformat(args.end)
-    week_ranges = list(WEEK_RANGES)
-    if args.last_week_feb_8 and week_ranges:
-        # Replace last week with Feb 2-8 for gold alignment
-        week_ranges = week_ranges[:-1] + [(date(2026, 2, 2), date(2026, 2, 8))]
-    weeks = [(s, e) for s, e in week_ranges if s >= start_d and e <= end_d]
+    # Build week ranges: dynamic (--weeks) or legacy (filter WEEK_RANGES by --start/--end)
+    if args.weeks is not None:
+        if args.weeks <= 0:
+            logger.error("--weeks must be > 0, got %d", args.weeks)
+            return 1
+        end_d = date.fromisoformat(args.end) if args.end else date.today()
+        weeks = build_week_ranges(end_d, args.weeks)
+    else:
+        start_d = date.fromisoformat(args.start)
+        end_d = date.fromisoformat(args.end)
+        week_ranges = list(WEEK_RANGES)
+        if args.last_week_feb_8 and week_ranges:
+            week_ranges = week_ranges[:-1] + [(date(2026, 2, 2), date(2026, 2, 8))]
+        weeks = [(s, e) for s, e in week_ranges if s >= start_d and e <= end_d]
+        if not weeks:
+            logger.error("No week ranges in [%s, %s]", args.start, args.end)
+            return 1
+
     if not weeks:
-        logger.error("No week ranges in [%s, %s]", args.start, args.end)
+        logger.error("No week ranges to process")
         return 1
 
     logger.info("Loading PRECIOS from %s", args.precios_path)

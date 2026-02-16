@@ -1,6 +1,7 @@
-"""Unit tests for get_weekly_transfers_with_prices (10-week analysis corrections)."""
+"""Unit tests for get_weekly_transfers_with_prices (12-week analysis corrections)."""
 
 import sys
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -12,10 +13,77 @@ if str(_root / "src") not in sys.path:
 
 from pos_frontend.transfers.weekly_with_prices import (
     apply_prices,
+    build_week_ranges,
     compute_weekly_cost_comparison,
     normalize_producto_for_match,
     _write_weekly_breakdown,
 )
+
+
+def test_build_week_ranges_num_weeks_one_end_sunday() -> None:
+    """num_weeks=1 with end_date on Sunday returns that week's Mon-Sun."""
+    end = date(2026, 2, 8)  # Sunday
+    ranges = build_week_ranges(end, 1)
+    assert len(ranges) == 1
+    mon, sun = ranges[0]
+    assert mon == date(2026, 2, 2)
+    assert sun == date(2026, 2, 8)
+
+
+def test_build_week_ranges_num_weeks_one_end_monday() -> None:
+    """num_weeks=1 with end_date on Monday returns that week's Mon-Sun."""
+    end = date(2026, 2, 2)  # Monday
+    ranges = build_week_ranges(end, 1)
+    assert len(ranges) == 1
+    mon, sun = ranges[0]
+    assert mon == date(2026, 2, 2)
+    assert sun == date(2026, 2, 8)
+
+
+def test_build_week_ranges_num_weeks_two() -> None:
+    """num_weeks=2 returns two consecutive weeks, most recent first."""
+    end = date(2026, 2, 8)  # Sunday
+    ranges = build_week_ranges(end, 2)
+    assert len(ranges) == 2
+    mon1, sun1 = ranges[0]
+    mon2, sun2 = ranges[1]
+    assert mon1 == date(2026, 2, 2)
+    assert sun1 == date(2026, 2, 8)
+    assert mon2 == date(2026, 1, 26)
+    assert sun2 == date(2026, 2, 1)
+
+
+def test_build_week_ranges_boundary_midweek() -> None:
+    """end_date mid-week (Wed) uses that week's Sun as anchor."""
+    end = date(2026, 2, 4)  # Wednesday
+    ranges = build_week_ranges(end, 1)
+    assert len(ranges) == 1
+    mon, sun = ranges[0]
+    assert mon == date(2026, 2, 2)
+    assert sun == date(2026, 2, 8)
+
+
+def test_build_week_ranges_twelve_weeks() -> None:
+    """num_weeks=12 produces 12 consecutive Mon-Sun ranges."""
+    end = date(2026, 2, 8)
+    ranges = build_week_ranges(end, 12)
+    assert len(ranges) == 12
+    for i, (mon, sun) in enumerate(ranges):
+        assert mon.weekday() == 0
+        assert sun.weekday() == 6
+        assert (sun - mon).days == 6
+        if i < 11:
+            prev_sun = ranges[i + 1][1]
+            assert (mon - prev_sun).days == 1
+
+
+def test_integration_weeks_arg_rejected_when_zero() -> None:
+    """CLI rejects --weeks 0 (validation)."""
+    from pos_frontend.transfers.weekly_with_prices import main
+
+    # --weeks 0 should return 1
+    result = main(["--weeks", "0"])
+    assert result == 1
 
 
 def test_apply_prices_with_alias() -> None:
