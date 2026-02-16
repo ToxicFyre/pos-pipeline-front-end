@@ -246,7 +246,7 @@ Both:
 - Load PRECIOS and AG_PRECIOS with gold-aligned prices.
 - Apply AG_PRECIOS to AG rows and PRECIOS to PT rows.
 - Exclude CEDIS from totals for gold/mart comparison.
-- Produce `weekly_breakdown.csv`, `weekly_cost_comparison.csv`, and `price_correction_report.csv`.
+- Produce `weekly_breakdown.csv`, `weekly_cost_comparison.csv`, `price_correction_report.csv`, and per-week `price_changes_YYYY-MM-DD_YYYY-MM-DD.csv` (items whose price was corrected, with before/after unit price and cost).
 
 ---
 
@@ -254,7 +254,10 @@ Both:
 
 | File | Purpose |
 |------|---------|
-| `testing/get_weekly_transfers_with_prices.py` | 10-week analysis script |
+| `testing/get_weekly_transfers_with_prices.py` | 10-week / 12-week analysis script |
+| `data/c_processed/transfers/weekly/price_changes_*.csv` | Per-week CSV of items with price corrections (before/after unit price and cost) |
+| `data/c_processed/transfers/weekly/correction_summary_totals.csv` | AG vs PT cost before/after by week |
+| `data/c_processed/transfers/weekly/correction_summary_alerts.csv` | Products with large price changes vs weighted-avg original (HIGH/MEDIUM flags) |
 | `testing/investigate_transfer_cost.py` | Parses gold, builds AG_PRECIOS |
 | `testing/compare_unit_prices_full.py` | Full PRECIOS vs gold comparison, outputs updated PRECIOS |
 | [investigation_report.md](investigation_report.md) | High-level investigation summary |

@@ -223,6 +223,211 @@ def apply_prices(
     return out, out
 
 
+def compute_weekly_price_changes(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract rows where price was changed, with before/after unit price and cost.
+
+    Filters to rows where Costo_before != Costo_after, computes Costo_unitario_before
+    from Costo_before / Cantidad, and returns a DataFrame with Producto, Almacen origen,
+    Cantidad, Costo_unitario_before, Costo_unitario_after, Costo_before, Costo_after,
+    Sucursal destino, and Orden.
+    """
+    empty_result = pd.DataFrame(
+        columns=[
+            "Producto",
+            "Almacen_origen",
+            "Cantidad",
+            "Costo_unitario_before",
+            "Costo_unitario_after",
+            "Costo_before",
+            "Costo_after",
+        ]
+    )
+    if df.empty or "Costo_before" not in df.columns or "Costo_after" not in df.columns:
+        return empty_result
+
+    changed = df[df["Costo_before"] != df["Costo_after"]].copy()
+    if changed.empty:
+        return empty_result
+
+    orig_col = next(
+        (c for c in changed.columns if "Almac" in c and "origen" in c.lower()),
+        "Almacen_origen",
+    )
+    cant = pd.to_numeric(changed["Costo_before"], errors="coerce")
+    qty = pd.to_numeric(changed["Cantidad"], errors="coerce").replace(0, float("nan"))
+    changed["Costo_unitario_before"] = cant / qty
+    changed["Costo_unitario_after"] = changed["Costo unitario"]
+    if orig_col != "Almacen_origen":
+        changed["Almacen_origen"] = changed[orig_col]
+
+    out_cols = [
+        "Producto",
+        "Almacen_origen",
+        "Cantidad",
+        "Costo_unitario_before",
+        "Costo_unitario_after",
+        "Costo_before",
+        "Costo_after",
+    ]
+    for opt in ["Sucursal destino", "Orden"]:
+        if opt in changed.columns:
+            out_cols.append(opt)
+
+    result = changed[out_cols].sort_values(by=["Producto", "Almacen_origen"])
+    return result.reset_index(drop=True)
+
+
+def compute_price_change_alerts(
+    df: pd.DataFrame,
+    pct_high: float = 50,
+    pct_medium: float = 25,
+) -> pd.DataFrame:
+    """Products whose corrected unit price differs significantly from weighted-avg original.
+
+    Flags potential wrong corrections. Returns DataFrame sorted by |Pct_change_unit| desc.
+    """
+    if df.empty or "Costo_before" not in df.columns or "Costo_after" not in df.columns:
+        return pd.DataFrame()
+
+    changed = df[df["Costo_before"] != df["Costo_after"]].copy()
+    if changed.empty:
+        return pd.DataFrame()
+
+    orig_col = next(
+        (c for c in changed.columns if "Almac" in c and "origen" in c.lower()),
+        "Almacen_origen",
+    )
+    if orig_col != "Almacen_origen":
+        changed["Almacen_origen"] = changed[orig_col]
+
+    cant = pd.to_numeric(changed["Costo_before"], errors="coerce")
+    qty = pd.to_numeric(changed["Cantidad"], errors="coerce").replace(0, float("nan"))
+    changed["_weighted_avg"] = cant / qty
+
+    agg = (
+        changed.groupby(["Producto", "Almacen_origen"], as_index=False)
+        .agg(
+            Total_Cantidad=("Cantidad", "sum"),
+            Costo_before_sum=("Costo_before", "sum"),
+            Costo_after_sum=("Costo_after", "sum"),
+            Unit_after=("Costo unitario", "first"),
+        )
+    )
+    agg["Weighted_avg_unit_before"] = agg["Costo_before_sum"] / agg["Total_Cantidad"].replace(
+        0, float("nan")
+    )
+    agg["Pct_change_unit"] = (
+        (agg["Unit_after"] - agg["Weighted_avg_unit_before"])
+        / agg["Weighted_avg_unit_before"].replace(0, float("nan"))
+        * 100
+    )
+    agg["Cost_diff"] = agg["Costo_after_sum"] - agg["Costo_before_sum"]
+
+    pct_abs = agg["Pct_change_unit"].abs()
+    agg["Alert"] = ""
+    agg.loc[pct_abs > pct_high, "Alert"] = "HIGH"
+    agg.loc[(pct_abs > pct_medium) & (pct_abs <= pct_high), "Alert"] = "MEDIUM"
+
+    out_cols = [
+        "Producto",
+        "Almacen_origen",
+        "Total_Cantidad",
+        "Weighted_avg_unit_before",
+        "Unit_after",
+        "Pct_change_unit",
+        "Costo_before_sum",
+        "Costo_after_sum",
+        "Cost_diff",
+        "Alert",
+    ]
+    result = agg[out_cols].sort_values(
+        "Pct_change_unit", key=lambda s: s.abs(), ascending=False
+    )
+    return result.reset_index(drop=True)
+
+
+def compute_origin_totals(
+    df: pd.DataFrame,
+    exclude_cedis_dest: bool = False,
+) -> pd.DataFrame:
+    """Aggregate cost by origin (AG vs PT) before and after correction, by week."""
+    if df.empty or "Costo_before" not in df.columns or "Week" not in df.columns:
+        return pd.DataFrame()
+
+    work = df.copy()
+    if exclude_cedis_dest and "Sucursal destino" in work.columns:
+        work = work[work["Sucursal destino"] != "Panem - CEDIS"]
+
+    orig_col = next(
+        (c for c in work.columns if "Almac" in c and "origen" in c.lower()),
+        "Almacen_origen",
+    )
+    if orig_col != "Almacen_origen":
+        work["Almacen_origen"] = work[orig_col]
+
+    work["_origin_type"] = "OTHER"
+    work.loc[
+        work["Almacen_origen"].str.contains("ALMACEN GENERAL", na=False), "_origin_type"
+    ] = "AG"
+    work.loc[
+        work["Almacen_origen"].str.contains("PRODUCTO TERMINADO", na=False), "_origin_type"
+    ] = "PT"
+
+    by_week_origin = (
+        work.groupby(["Week", "_origin_type"], as_index=False)
+        .agg(
+            Costo_before=("Costo_before", "sum"),
+            Costo_after=("Costo_after", "sum"),
+        )
+    )
+
+    ag_rows = by_week_origin[by_week_origin["_origin_type"] == "AG"].drop(
+        columns=["_origin_type"]
+    )
+    pt_rows = by_week_origin[by_week_origin["_origin_type"] == "PT"].drop(
+        columns=["_origin_type"]
+    )
+
+    ag_rows = ag_rows.rename(
+        columns={"Costo_before": "AG_Before", "Costo_after": "AG_After"}
+    )
+    pt_rows = pt_rows.rename(
+        columns={"Costo_before": "PT_Before", "Costo_after": "PT_After"}
+    )
+
+    merged = ag_rows.merge(pt_rows, on="Week", how="outer").fillna(0)
+    merged["AG_Diff"] = merged["AG_After"] - merged["AG_Before"]
+    merged["AG_Pct"] = (
+        merged["AG_Diff"] / merged["AG_Before"].replace(0, float("nan")) * 100
+    )
+    merged["PT_Diff"] = merged["PT_After"] - merged["PT_Before"]
+    merged["PT_Pct"] = (
+        merged["PT_Diff"] / merged["PT_Before"].replace(0, float("nan")) * 100
+    )
+
+    ag_before = merged["AG_Before"].sum()
+    ag_after = merged["AG_After"].sum()
+    pt_before = merged["PT_Before"].sum()
+    pt_after = merged["PT_After"].sum()
+    all_row = pd.DataFrame(
+        [
+            {
+                "Week": "All",
+                "AG_Before": ag_before,
+                "AG_After": ag_after,
+                "AG_Diff": ag_after - ag_before,
+                "AG_Pct": ((ag_after - ag_before) / ag_before * 100) if ag_before != 0 else float("nan"),
+                "PT_Before": pt_before,
+                "PT_After": pt_after,
+                "PT_Diff": pt_after - pt_before,
+                "PT_Pct": ((pt_after - pt_before) / pt_before * 100) if pt_before != 0 else float("nan"),
+            }
+        ]
+    )
+    result = pd.concat([all_row, merged], ignore_index=True)
+    return result[["Week", "AG_Before", "AG_After", "AG_Diff", "AG_Pct", "PT_Before", "PT_After", "PT_Diff", "PT_Pct"]]
+
+
 def compute_cost_by_dest_branch(df: pd.DataFrame) -> pd.DataFrame:
     """Aggregate total Costo before/after by Sucursal destino."""
     if df.empty or "Costo_before" not in df.columns:
@@ -396,6 +601,12 @@ def main(argv: list[str] | None = None) -> int:
         save_weekly_csv(df_updated, out_path)
         logger.info("Saved %s", out_path)
 
+        price_changes = compute_weekly_price_changes(df_updated)
+        price_changes_path = output_dir / f"price_changes_{start_str}_{end_str}.csv"
+        price_changes_path.parent.mkdir(parents=True, exist_ok=True)
+        price_changes.to_csv(price_changes_path, index=False, encoding="utf-8-sig")
+        logger.info("Saved %s", price_changes_path)
+
     # Cost-difference reports
     if all_transfers:
         combined = pd.concat(all_transfers, ignore_index=True)
@@ -415,6 +626,17 @@ def main(argv: list[str] | None = None) -> int:
 
         # Breakdown report for reconciliation (e.g. Feb 2-7: 283k expected)
         _write_weekly_breakdown(combined, output_dir)
+
+        # Correction summary: AG/PT totals and price change alerts
+        origin_totals = compute_origin_totals(combined, exclude_cedis_dest=exclude_cedis)
+        origin_totals_path = output_dir / "correction_summary_totals.csv"
+        origin_totals.to_csv(origin_totals_path, index=False, encoding="utf-8-sig")
+        logger.info("Saved %s", origin_totals_path)
+
+        alerts = compute_price_change_alerts(combined, pct_high=50, pct_medium=25)
+        alerts_path = output_dir / "correction_summary_alerts.csv"
+        alerts.to_csv(alerts_path, index=False, encoding="utf-8-sig")
+        logger.info("Saved %s", alerts_path)
 
     return 0
 

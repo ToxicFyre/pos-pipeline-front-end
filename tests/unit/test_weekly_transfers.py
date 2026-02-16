@@ -14,7 +14,10 @@ if str(_root / "src") not in sys.path:
 from pos_frontend.transfers.weekly_with_prices import (
     apply_prices,
     build_week_ranges,
+    compute_origin_totals,
+    compute_price_change_alerts,
     compute_weekly_cost_comparison,
+    compute_weekly_price_changes,
     normalize_producto_for_match,
     _write_weekly_breakdown,
 )
@@ -154,6 +157,95 @@ def test_write_weekly_breakdown_gold_columns() -> None:
         other_row = breakdown[breakdown["Week"] == "2026-01-26_2026-02-01"].iloc[0]
         assert pd.isna(other_row["Gold_Reference"])
         assert pd.isna(other_row["Gold_NUMEROS"])
+
+
+def test_compute_weekly_price_changes() -> None:
+    """compute_weekly_price_changes returns only rows where price changed, with derived columns."""
+    df = pd.DataFrame({
+        "Producto": ["Item A", "Item B", "Item C"],
+        "Almacen_origen": [
+            "ALMACEN PRODUCTO TERMINADO",
+            "ALMACEN GENERAL",
+            "ALMACEN PRODUCTO TERMINADO",
+        ],
+        "Cantidad": [10, 5, 3],
+        "Costo_before": [100.0, 50.0, 30.0],
+        "Costo_after": [120.0, 50.0, 36.0],
+        "Costo unitario": [12.0, 10.0, 12.0],
+    })
+    result = compute_weekly_price_changes(df)
+    assert len(result) == 2
+    assert "Item B" not in result["Producto"].values
+    row_a = result[result["Producto"] == "Item A"].iloc[0]
+    assert row_a["Costo_unitario_before"] == 10.0
+    assert row_a["Costo_unitario_after"] == 12.0
+    assert row_a["Costo_before"] == 100.0
+    assert row_a["Costo_after"] == 120.0
+    row_c = result[result["Producto"] == "Item C"].iloc[0]
+    assert row_c["Costo_unitario_before"] == 10.0
+    assert row_c["Costo_unitario_after"] == 12.0
+
+
+def test_compute_weekly_price_changes_empty_when_no_changes() -> None:
+    """compute_weekly_price_changes returns empty DataFrame with columns when no changes."""
+    df = pd.DataFrame({
+        "Producto": ["Item A"],
+        "Almacen_origen": ["ALMACEN PRODUCTO TERMINADO"],
+        "Cantidad": [10],
+        "Costo_before": [100.0],
+        "Costo_after": [100.0],
+        "Costo unitario": [10.0],
+    })
+    result = compute_weekly_price_changes(df)
+    assert len(result) == 0
+    assert list(result.columns) == [
+        "Producto",
+        "Almacen_origen",
+        "Cantidad",
+        "Costo_unitario_before",
+        "Costo_unitario_after",
+        "Costo_before",
+        "Costo_after",
+    ]
+
+
+def test_compute_price_change_alerts() -> None:
+    """compute_price_change_alerts flags products with large price changes."""
+    df = pd.DataFrame({
+        "Producto": ["Item A", "Item A", "Item B"],
+        "Almacen_origen": ["ALMACEN GENERAL", "ALMACEN GENERAL", "ALMACEN PRODUCTO TERMINADO"],
+        "Cantidad": [10, 5, 4],
+        "Costo_before": [100.0, 50.0, 40.0],
+        "Costo_after": [200.0, 100.0, 44.0],
+        "Costo unitario": [20.0, 20.0, 11.0],
+    })
+    result = compute_price_change_alerts(df, pct_high=50, pct_medium=25)
+    assert len(result) == 2
+    row_a = result[result["Producto"] == "Item A"].iloc[0]
+    assert row_a["Weighted_avg_unit_before"] == 10.0
+    assert row_a["Unit_after"] == 20.0
+    assert row_a["Pct_change_unit"] == 100.0
+    assert row_a["Alert"] == "HIGH"
+    row_b = result[result["Producto"] == "Item B"].iloc[0]
+    assert row_b["Pct_change_unit"] == 10.0
+    assert row_b["Alert"] == ""
+
+
+def test_compute_origin_totals() -> None:
+    """compute_origin_totals returns AG/PT before/after by week."""
+    df = pd.DataFrame({
+        "Week": ["W1", "W1", "W2"],
+        "Almacen_origen": ["ALMACEN GENERAL", "ALMACEN PRODUCTO TERMINADO", "ALMACEN GENERAL"],
+        "Costo_before": [100.0, 200.0, 50.0],
+        "Costo_after": [110.0, 180.0, 55.0],
+    })
+    result = compute_origin_totals(df, exclude_cedis_dest=False)
+    assert "All" in result["Week"].values
+    all_row = result[result["Week"] == "All"].iloc[0]
+    assert all_row["AG_Before"] == 150.0
+    assert all_row["AG_After"] == 165.0
+    assert all_row["PT_Before"] == 200.0
+    assert all_row["PT_After"] == 180.0
 
 
 def test_exclude_cedis_dest_behavior() -> None:

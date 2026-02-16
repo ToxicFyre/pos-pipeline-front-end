@@ -17,7 +17,15 @@ Or with options (requires `WS_USER`, `WS_PASS`, `WS_BASE` env vars):
 python testing/get_weekly_transfers_with_prices.py --data-root data --precios-path PRECIOS.xlsx --start 2025-12-01 --end 2026-02-07
 ```
 
-Output: `data/c_processed/transfers/weekly/transfers_*.csv`, `price_correction_report.csv`, `weekly_cost_comparison.csv`, `weekly_breakdown.csv`
+Output: `data/c_processed/transfers/weekly/transfers_*.csv`, `price_changes_*.csv` (per-week items with price corrections: before/after unit price and cost), `price_correction_report.csv`, `weekly_cost_comparison.csv`, `weekly_breakdown.csv`, `correction_summary_totals.csv` (AG vs PT cost before/after by week), `correction_summary_alerts.csv` (products with large price changes vs weighted-avg original, flagged HIGH/MEDIUM for review)
+
+**Correction report (HTML):** After running weekly transfers and pivots, generate a visual report:
+
+```cmd
+python scripts/generate_transfer_correction_report.py
+```
+
+Output: `data/c_processed/transfers/weekly/transfer_correction_report.html` — totals before vs after by week and branch, plus item-level price differences.
 
 **Pivot marts (branch × category):** After running weekly transfers, build pivot tables from the corrected data:
 
