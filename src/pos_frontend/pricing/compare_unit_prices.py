@@ -14,6 +14,7 @@ import pandas as pd
 
 from pos_frontend.config.paths import get_project_root
 from pos_frontend.transfers.gold_investigation import parse_gold_excel
+from pos_frontend.transfers.weekly_with_prices import load_precios as load_precios_from_weekly
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -57,13 +58,8 @@ def build_gold_canonical_prices(gold: pd.DataFrame) -> tuple[pd.DataFrame, pd.Da
 
 
 def load_precios(path: Path) -> pd.DataFrame:
-    """Load PRECIOS.xlsx (PT)."""
-    df = pd.read_excel(path, sheet_name=0)
-    if "NOMBRE WANSOFT" in df.columns and "PRECIO DRIVE" in df.columns:
-        df = df.rename(columns={"NOMBRE WANSOFT": "Producto", "PRECIO DRIVE": "Precio unitario"})
-    df["Producto"] = df["Producto"].astype(str).str.strip()
-    df["Precio unitario"] = pd.to_numeric(df["Precio unitario"], errors="coerce")
-    return df[["Producto", "Precio unitario"]].drop_duplicates(subset=["Producto"], keep="first")
+    """Load PRECIOS.xlsx (PT). Uses PRECIO UNITARIO when present."""
+    return load_precios_from_weekly(path)
 
 
 def load_ag_precios(path: Path) -> pd.DataFrame:

@@ -7,7 +7,7 @@ cd "$(dirname "$0")/../.."
 
 echo "[$(date)] Pre-weekly check: refreshing PRECIOS/AG_PRECIOS from gold"
 
-python testing/compare_unit_prices_full.py
+python3 testing/compare_unit_prices_full.py
 rc=$?
 
 if [ $rc -ne 0 ]; then

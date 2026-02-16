@@ -13,6 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 from pos_frontend.config.paths import get_project_root
+from pos_frontend.config.weekly_transfers import AG_EXCLUDED_ORDERS, PT_EXCLUDED_ORDERS
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,6 +34,89 @@ SHEET_TO_SUCURSAL = {
 
 GOLD_Fecha_START = "2026-02-02"
 GOLD_Fecha_END = "2026-02-08"
+
+# Known NUMEROS Kavia total (fallback if parse fails)
+GOLD_NUMEROS_KAVIA = 62_083.0
+
+
+def parse_numeros(path: Path) -> pd.DataFrame:
+    """Read NUMEROS sheet from golden Excel and extract per-branch totals.
+
+    NUMEROS is typically a summary table with branch names and cost columns.
+    Returns DataFrame with Branch, Total columns. Layout may vary; this uses heuristics.
+    """
+    try:
+        df = pd.read_excel(path, sheet_name="NUMEROS", header=None)
+    except Exception as e:
+        logger.warning("Could not read NUMEROS sheet: %s", e)
+        return pd.DataFrame()
+    if df.empty or len(df) < 2:
+        return pd.DataFrame()
+    # Heuristic: first column often has branch names; last numeric column often has total
+    # Try header row (row 0)
+    first_row = df.iloc[0].astype(str).tolist()
+    branch_col = None
+    total_col = None
+    for i, v in enumerate(first_row):
+        v_lower = str(v).lower()
+        if any(x in v_lower for x in ("sucursal", "branch", "suc", "destino")):
+            branch_col = i
+        if any(x in v_lower for x in ("total", "costo", "suma", "total")):
+            total_col = i
+    if branch_col is None:
+        branch_col = 0
+    if total_col is None:
+        # Use last numeric column
+        for j in range(len(first_row) - 1, -1, -1):
+            try:
+                float(str(first_row[j]).replace(",", "").replace(" ", ""))
+                total_col = j
+                break
+            except (ValueError, TypeError):
+                continue
+    if total_col is None:
+        total_col = 1
+    # Data starts at row 1
+    result = pd.DataFrame({
+        "Branch": df.iloc[1:, branch_col].astype(str).str.strip(),
+        "Total": pd.to_numeric(df.iloc[1:, total_col], errors="coerce"),
+    })
+    result = result[result["Total"].notna() & (result["Branch"].str.len() > 0)]
+    return result.reset_index(drop=True)
+
+
+def extract_kavia_total(numeros_df: pd.DataFrame) -> float:
+    """Extract Kavia row total from NUMEROS DataFrame. Returns GOLD_NUMEROS_KAVIA if not found."""
+    if numeros_df.empty or "Branch" not in numeros_df.columns:
+        return GOLD_NUMEROS_KAVIA
+    branch_col = numeros_df["Branch"].astype(str).str.strip().str.upper()
+    kavia_mask = branch_col.str.contains("KAVIA", na=False) | (branch_col == "K")
+    kavia_rows = numeros_df[kavia_mask]
+    if kavia_rows.empty:
+        return GOLD_NUMEROS_KAVIA
+    return float(kavia_rows["Total"].iloc[0])
+
+
+def compute_ours_ag_pt_by_branch(ours: pd.DataFrame) -> pd.DataFrame:
+    """Compute AG+PT cost sum by Sucursal destino."""
+    if ours.empty:
+        return pd.DataFrame()
+    df = ours.copy()
+    dest_col = next((c for c in df.columns if "destino" in c.lower()), "Sucursal destino")
+    if dest_col not in df.columns:
+        return pd.DataFrame()
+    # Prefer Costo_after (post price correction), then Costo, else Costo unitario * Cantidad
+    if "Costo_after" in df.columns:
+        df["_Costo"] = df["Costo_after"]
+    elif "Costo" in df.columns:
+        df["_Costo"] = df["Costo"]
+    elif "Costo unitario" in df.columns and "Cantidad" in df.columns:
+        df["_Costo"] = df["Costo unitario"] * df["Cantidad"]
+    else:
+        return pd.DataFrame()
+    agg = df.groupby(dest_col, as_index=False).agg(Total=("_Costo", "sum"))
+    agg = agg.rename(columns={dest_col: "Sucursal_destino", "Total": "AG_plus_PT_Total"})
+    return agg
 
 
 def detect_header_row(df: pd.DataFrame) -> int:
@@ -152,6 +236,34 @@ def load_ours(path: Path) -> pd.DataFrame:
     return df
 
 
+def filter_orders_for_gold_alignment(df: pd.DataFrame) -> pd.DataFrame:
+    """Filter out orders excluded in golden dataset (bleed-through from prior weeks).
+
+    Used only for gold-aligned diagnostic comparison, NOT in production pipeline.
+    - AG rows: exclude Orden in AG_EXCLUDED_ORDERS
+    - PT rows: exclude Orden in PT_EXCLUDED_ORDERS
+    """
+    if df.empty:
+        return df
+    df = df.copy()
+    if "Almacen_origen" not in df.columns:
+        orig_col = next((c for c in df.columns if "Almac" in c and "origen" in c.lower()), None)
+        if orig_col:
+            df["Almacen_origen"] = df[orig_col].astype(str).str.strip().str.upper()
+        else:
+            return df
+    orden_col = "Orden" if "Orden" in df.columns else None
+    if not orden_col:
+        return df
+    orden_str = df[orden_col].astype(str).str.strip()
+    is_ag = df["Almacen_origen"].str.contains("ALMACEN GENERAL", na=False)
+    is_pt = df["Almacen_origen"].str.contains("ALMACEN PRODUCTO TERMINADO", na=False)
+    mask_ag_excl = is_ag & orden_str.isin(AG_EXCLUDED_ORDERS)
+    mask_pt_excl = is_pt & orden_str.isin(PT_EXCLUDED_ORDERS)
+    keep = ~(mask_ag_excl | mask_pt_excl)
+    return df[keep].reset_index(drop=True)
+
+
 def match_and_compare(ours: pd.DataFrame, gold_lookup: dict) -> pd.DataFrame:
     """Match our rows to gold, compare unit costs, return report. Includes unmatched rows."""
     rows = []
@@ -236,6 +348,8 @@ def main(argv: list[str] | None = None) -> int:
 
     logger.info("Loading ours: %s", ours_path)
     ours = load_ours(ours_path)
+    ours = filter_orders_for_gold_alignment(ours)
+    logger.info("Ours rows after order exclusions: %d", len(ours))
 
     report = match_and_compare(ours, gold_lookup)
     if not report.empty:

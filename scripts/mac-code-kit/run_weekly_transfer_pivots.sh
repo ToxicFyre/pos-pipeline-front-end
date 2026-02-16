@@ -7,6 +7,6 @@ cd "$(dirname "$0")/../.."
 
 echo "[$(date)] Building pivot marts from corrected weekly transfers"
 
-python testing/build_weekly_transfer_pivots.py
+python3 testing/build_weekly_transfer_pivots.py
 
 echo "[$(date)] Finished"

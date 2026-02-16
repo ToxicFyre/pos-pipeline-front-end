@@ -57,15 +57,27 @@ def get_week_boundaries(d: date) -> tuple[date, date]:
 
 def load_precios(precios_path: str | Path) -> pd.DataFrame:
     """Load PRECIOS.xlsx and return DataFrame with Producto, Precio unitario.
-    Uses NOMBRE WANSOFT -> Producto, PRECIO DRIVE -> Precio unitario."""
+
+    PRECIO DRIVE is price for PRESENTACION quantity; PRECIO UNITARIO = PRECIO DRIVE / PRESENTACION.
+    Prefers PRECIO UNITARIO column if present (from update_precios_with_unit_prices.py), else computes it.
+    """
     path = Path(precios_path)
     df = pd.read_excel(path, sheet_name=0)
-    # Map PRECIOS columns to expected names
-    if "NOMBRE WANSOFT" in df.columns and "PRECIO DRIVE" in df.columns:
-        df = df.rename(columns={"NOMBRE WANSOFT": "Producto", "PRECIO DRIVE": "Precio unitario"})
-    df["Producto"] = df["Producto"].astype(str).str.strip()
-    df["Precio unitario"] = pd.to_numeric(df["Precio unitario"], errors="coerce")
-    # Drop duplicates, keep first
+    product_col = "NOMBRE WANSOFT" if "NOMBRE WANSOFT" in df.columns else "Producto"
+    df["Producto"] = df[product_col].astype(str).str.strip()
+    # Unit price: prefer PRECIO UNITARIO, else compute PRECIO DRIVE / PRESENTACION, else PRECIO DRIVE
+    precio_drive_col = "PRECIO DRIVE" if "PRECIO DRIVE" in df.columns else None
+    if "PRECIO UNITARIO" in df.columns:
+        df["Precio unitario"] = pd.to_numeric(df["PRECIO UNITARIO"], errors="coerce")
+    elif precio_drive_col:
+        df["Precio unitario"] = pd.to_numeric(df[precio_drive_col], errors="coerce")
+        present_col = next((c for c in df.columns if "present" in str(c).lower()), None)
+        if present_col is not None:
+            present_num = pd.to_numeric(df[present_col], errors="coerce")
+            mask = (present_num > 0) & df["Precio unitario"].notna()
+            df.loc[mask, "Precio unitario"] = df.loc[mask, "Precio unitario"] / present_num.loc[mask]
+    else:
+        df["Precio unitario"] = pd.to_numeric(df.get("Precio unitario", float("nan")), errors="coerce")
     df = df.drop_duplicates(subset=["Producto"], keep="first")
     return df[["Producto", "Precio unitario"]]
 

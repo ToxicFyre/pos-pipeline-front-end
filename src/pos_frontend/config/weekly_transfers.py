@@ -9,3 +9,8 @@ GOLD_REFERENCE_BY_WEEK: dict[str, tuple[float, float]] = {
 GOLD_NUMEROS_BY_WEEK: dict[str, float] = {
     "2026-02-02_2026-02-07": 283368.0,
 }
+
+# Orders excluded in golden dataset (bleed-through from prior weeks)
+# Used only for gold-aligned diagnostic comparison, NOT in production pipeline
+AG_EXCLUDED_ORDERS = {"9980-11588-2609294", "9980-11588-2609295", "9980-11588-2609296"}
+PT_EXCLUDED_ORDERS = {"9982-11588-2607562", "9982-11588-2607690"}
